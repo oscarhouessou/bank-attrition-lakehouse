@@ -1,0 +1,17 @@
+[project]
+name = "churn-lakehouse"
+version = "0.1.0"
+description = "Churn, segmentation et rétention prescriptive sur Azure Databricks"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::FutureWarning"]
+
+[tool.ruff]
+line-length = 110
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
