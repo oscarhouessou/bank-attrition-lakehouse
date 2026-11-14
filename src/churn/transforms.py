@@ -2,6 +2,10 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
+import datetime as dt
+from churn.config import KEYS, LABEL
+
+
 OPERATION_TYPES = ["salaire", "paiement_carte", "prelevement", "virement_sortant_autre_banque",
                    "virement_entrant", "frais_incident"]
 INTERACTION_TYPES = ["connexion_appli", "contact_conseiller", "reclamation"]
@@ -77,3 +81,34 @@ def clean_clotures(bronze: DataFrame) -> DataFrame:
                     F.to_date("date_cloture").alias("date_cloture"),
                     F.col("motif_cloture").cast("string"))
             .dropDuplicates(["client_id"]))
+    
+
+
+# ----------------------------------------------------------------------------
+# GOLD : population et labels
+# ----------------------------------------------------------------------------
+def population(clients: DataFrame, clotures: DataFrame, snapshots: DataFrame) -> DataFrame:
+    """Clients en relation à chaque date d'observation : entrés avant, pas encore clôturés."""
+    snaps = snapshots.select(F.col("snapshot_date").cast("date"))
+    return (clients.select("client_id", "date_entree_relation")
+            .crossJoin(F.broadcast(snaps))                         # chaque client x chaque date
+            .where(F.col("date_entree_relation") < F.col("snapshot_date"))
+            .join(clotures.select("client_id", "date_cloture"), "client_id", "left")
+            .where(F.col("date_cloture").isNull() | (F.col("date_cloture") >= F.col("snapshot_date")))
+            .select(*KEYS))
+
+
+def build_labels(clotures: DataFrame, pop: DataFrame, horizon_days: int = 90) -> DataFrame:
+    """churn = 1 si la relation est clôturée dans [snapshot_date, snapshot_date + horizon[."""
+    return (pop.select(*KEYS).distinct()
+            .join(clotures.select("client_id", "date_cloture"), "client_id", "left")
+            .withColumn(LABEL, F.when(
+                (F.col("date_cloture") >= F.col("snapshot_date")) &
+                (F.col("date_cloture") < F.date_add("snapshot_date", horizon_days)),
+                1).otherwise(0))
+            .select(*KEYS, LABEL))
+
+
+def matured_snapshots(snapshot_dates: list, data_end_exclusive: dt.date, horizon_days: int) -> list:
+    """Dates d'observation dont la fenêtre de label est entièrement observée."""
+    return [d for d in snapshot_dates if d + dt.timedelta(days=horizon_days) <= data_end_exclusive]
