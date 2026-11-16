@@ -22,9 +22,10 @@ except Exception:  # pragma: no cover
 
 
 # ----------------------------------------------------------------------------
-# Attrition (utilisé à l'étape 10)
+# Attrition
 # ----------------------------------------------------------------------------
 def build_churn_pipeline(model_type: str = "hgb", **params) -> Pipeline:
+    """Pipeline complet : préparation des variables + classifieur."""
     if model_type == "logreg":   # baseline interprétable
         pre = ColumnTransformer([
             ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
@@ -58,6 +59,7 @@ def lift_at_k(y_true, y_score, k: float = 0.1) -> float:
 
 
 def evaluate(y_true, y_score) -> dict:
+    """Métriques adaptées aux classes déséquilibrées."""
     return {
         "roc_auc": float(roc_auc_score(y_true, y_score)),
         "pr_auc": float(average_precision_score(y_true, y_score)),
@@ -79,7 +81,7 @@ class ChurnProbaModel(_PythonModel):
 
 
 # ----------------------------------------------------------------------------
-# Segmentation (cette étape)
+# Segmentation
 # ----------------------------------------------------------------------------
 def _segment_matrix(df: pd.DataFrame) -> pd.DataFrame:
     """Prépare les variables : log pour écraser les très grandes valeurs (revenus, dépenses)."""
@@ -119,6 +121,8 @@ def name_segments(centroids: pd.DataFrame) -> dict[int, str]:
             n = "Patrimoniaux multi-équipés"
         elif c.n_app_logins_30d > 0.4:
             n = "Digitaux actifs"
+        elif c.n_app_logins_30d < -0.3 and c.nb_produits > 0.3:
+            n = "Traditionnels multi-équipés"
         else:
             n = "Peu engagés"
         names[i] = n
