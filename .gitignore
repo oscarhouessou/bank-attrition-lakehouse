@@ -5,3 +5,4 @@ __pycache__/
 spark-warehouse/
 metastore_db/
 test-results.xml
+.venv/
